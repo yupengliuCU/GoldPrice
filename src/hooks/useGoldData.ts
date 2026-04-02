@@ -16,7 +16,7 @@ interface GoldData {
   lastUpdated: Date | null;
 }
 
-export function useGoldData(): GoldData {
+export function useGoldData() {
   const [data, setData] = useState<GoldData>({
     spot: null,
     futures: null,
@@ -93,5 +93,5 @@ export function useGoldData(): GoldData {
     return () => clearInterval(interval);
   }, [fetchData]);
 
-  return data;
+  return { ...data, refresh: fetchData };
 }

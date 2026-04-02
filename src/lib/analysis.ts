@@ -1,18 +1,33 @@
 import type { NewsArticle, AnalysisResult } from './types';
 
-const BULLISH_KEYWORDS = [
-  '上涨', '走高', '增持', '避险', '需求增加', '央行买入', '创新高', '突破',
-  '看涨', '利好', '买入', '金价涨', '黄金涨',
-  'bullish', 'rally', 'surge', 'safe haven', 'demand', 'record high',
-  'all-time high', 'buying', 'soar', 'jump', 'gain',
+// Phrases specific to gold market sentiment (more precise than single words)
+const BULLISH_PHRASES = [
+  // Chinese
+  '金价上涨', '金价走高', '黄金上涨', '黄金走高', '增持黄金', '央行买入',
+  '避险需求', '需求增加', '创新高', '突破新高', '看涨', '利好黄金',
+  // English - use multi-word phrases to avoid false positives
+  'gold rises', 'gold surges', 'gold jumps', 'gold gains', 'gold soars',
+  'gold rallies', 'gold climbs', 'prices rise', 'prices surge',
+  'safe haven', 'record high', 'all-time high', 'bullish',
+  'buying gold', 'gold demand', 'central bank buying',
+  'geopolitical risk', 'geopolitical tensions', 'inflation hedge',
 ];
 
-const BEARISH_KEYWORDS = [
-  '下跌', '走低', '抛售', '减持', '利率上升', '美元走强', '回落', '下滑',
-  '看跌', '利空', '卖出', '金价跌', '黄金跌',
-  'bearish', 'drop', 'sell-off', 'rate hike', 'strong dollar',
-  'decline', 'fall', 'plunge', 'slump', 'tumble',
+const BEARISH_PHRASES = [
+  // Chinese
+  '金价下跌', '金价走低', '黄金下跌', '黄金走低', '抛售黄金', '减持黄金',
+  '利率上升', '美元走强', '看跌', '利空黄金',
+  // English
+  'gold drops', 'gold falls', 'gold declines', 'gold slumps', 'gold tumbles',
+  'gold plunges', 'gold sinks', 'gold dips', 'prices drop', 'prices fall',
+  'gold down', 'bearish', 'sell-off', 'selloff',
+  'rate hike', 'strong dollar', 'dollar strength',
+  'profit taking', 'profit-taking',
 ];
+
+// Single keywords that are strong signals on their own
+const BULLISH_KEYWORDS = ['surge', 'soar', 'rally', 'bullish', 'record'];
+const BEARISH_KEYWORDS = ['plunge', 'crash', 'bearish', 'slump', 'tumble'];
 
 function calculateSentiment(articles: NewsArticle[]): number {
   const text = articles
@@ -20,24 +35,40 @@ function calculateSentiment(articles: NewsArticle[]): number {
     .join(' ')
     .toLowerCase();
 
-  let positiveCount = 0;
-  let negativeCount = 0;
+  let positiveScore = 0;
+  let negativeScore = 0;
 
-  for (const keyword of BULLISH_KEYWORDS) {
-    const regex = new RegExp(keyword.toLowerCase(), 'g');
+  // Multi-word phrases (higher weight: +8 each)
+  for (const phrase of BULLISH_PHRASES) {
+    const regex = new RegExp(phrase.toLowerCase(), 'g');
     const matches = text.match(regex);
-    if (matches) positiveCount += matches.length;
+    if (matches) positiveScore += matches.length * 8;
+  }
+
+  for (const phrase of BEARISH_PHRASES) {
+    const regex = new RegExp(phrase.toLowerCase(), 'g');
+    const matches = text.match(regex);
+    if (matches) negativeScore += matches.length * 8;
+  }
+
+  // Strong single keywords with word boundaries (lower weight: +4 each)
+  for (const keyword of BULLISH_KEYWORDS) {
+    const regex = new RegExp(`\\b${keyword}\\b`, 'gi');
+    const matches = text.match(regex);
+    if (matches) positiveScore += matches.length * 4;
   }
 
   for (const keyword of BEARISH_KEYWORDS) {
-    const regex = new RegExp(keyword.toLowerCase(), 'g');
+    const regex = new RegExp(`\\b${keyword}\\b`, 'gi');
     const matches = text.match(regex);
-    if (matches) negativeCount += matches.length;
+    if (matches) negativeScore += matches.length * 4;
   }
 
-  // Score from 0-100, starting at 50 (neutral)
-  const score = 50 + (positiveCount - negativeCount) * 5;
-  return Math.max(0, Math.min(100, score));
+  // Normalize: score from 0-100, starting at 50
+  const netScore = positiveScore - negativeScore;
+  // Each 10 points of net score moves the gauge by 5%
+  const score = 50 + netScore * 0.5;
+  return Math.max(0, Math.min(100, Math.round(score)));
 }
 
 function getSpreadSignal(spreadPercent: number): { score: number; label: string } {
