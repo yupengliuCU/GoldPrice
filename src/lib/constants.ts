@@ -37,6 +37,6 @@ export function formatChange(change: number, changePercent: number): string {
 
 // API refresh intervals (in ms)
 export const GOLD_CACHE_DURATION = 15 * 60 * 1000;   // 15 minutes
-export const NEWS_CACHE_DURATION = 30 * 60 * 1000;   // 30 minutes
+export const NEWS_CACHE_DURATION = 10 * 60 * 1000;   // 10 minutes
 export const EXCHANGE_CACHE_DURATION = 60 * 60 * 1000; // 60 minutes
 export const CLIENT_REFRESH_INTERVAL = 15 * 60 * 1000; // 15 minutes

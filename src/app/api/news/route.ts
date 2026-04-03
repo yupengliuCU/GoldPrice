@@ -34,8 +34,9 @@ export async function GET() {
     }
 
     // Google News RSS — free, real-time, no API key needed
+    // "when:1d" filters to last 24 hours for freshest results
     const res = await fetch(
-      'https://news.google.com/rss/search?q=gold+price&hl=en-US&gl=US&ceid=US:en',
+      'https://news.google.com/rss/search?q=gold+price+when:1d&hl=en-US&gl=US&ceid=US:en',
       { headers: { 'User-Agent': 'Mozilla/5.0' } }
     );
 
@@ -47,17 +48,21 @@ export async function GET() {
 
     // Parse RSS items
     const itemRegex = /<item>([\s\S]*?)<\/item>/g;
-    const articles = [];
+    const allArticles = [];
     let match;
-    let count = 0;
 
-    while ((match = itemRegex.exec(xml)) !== null && count < 15) {
+    while ((match = itemRegex.exec(xml)) !== null) {
       const article = parseRssItem(match[1]);
       if (article.title) {
-        articles.push(article);
-        count++;
+        allArticles.push(article);
       }
     }
+
+    // Sort by publish time (newest first) and take top 15
+    allArticles.sort((a, b) =>
+      new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime()
+    );
+    const articles = allArticles.slice(0, 15);
 
     cache = { data: { articles }, timestamp: Date.now() };
     return NextResponse.json({ articles });
