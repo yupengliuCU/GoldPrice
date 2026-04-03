@@ -113,9 +113,10 @@ export default function PriceChart({
               dataKey="date"
               stroke="#94A3B8"
               fontSize={12}
-              tickFormatter={(v) => {
-                const d = new Date(v);
-                return `${d.getMonth() + 1}/${d.getDate()}`;
+              tickFormatter={(v: string) => {
+                // Parse directly from YYYY-MM-DD to avoid timezone shift
+                const parts = v.split('-');
+                return `${parseInt(parts[1])}/${parseInt(parts[2])}`;
               }}
               interval="preserveStartEnd"
             />
@@ -136,9 +137,9 @@ export default function PriceChart({
                 formatPrice(Number(value), currency),
                 name === 'spot' ? '现货' : '期货',
               ]}
-              labelFormatter={(label) => {
-                const d = new Date(label);
-                return d.toLocaleDateString('zh-CN');
+              labelFormatter={(label: string) => {
+                const [y, m, d] = label.split('-');
+                return `${y}年${parseInt(m)}月${parseInt(d)}日`;
               }}
             />
             <Area
