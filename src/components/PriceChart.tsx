@@ -184,9 +184,9 @@ export default function PriceChart({
                 dataKey="date"
                 stroke="#94A3B8"
                 fontSize={11}
-                tickFormatter={(v) => {
-                  const d = new Date(v);
-                  return `${d.getMonth() + 1}/${d.getDate()}`;
+                tickFormatter={(v: string) => {
+                  const parts = v.split('-');
+                  return `${parseInt(parts[1])}/${parseInt(parts[2])}`;
                 }}
               />
               <YAxis
