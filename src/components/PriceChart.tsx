@@ -137,8 +137,8 @@ export default function PriceChart({
                 formatPrice(Number(value), currency),
                 name === 'spot' ? '现货' : '期货',
               ]}
-              labelFormatter={(label: string) => {
-                const [y, m, d] = label.split('-');
+              labelFormatter={(label) => {
+                const [y, m, d] = String(label).split('-');
                 return `${y}年${parseInt(m)}月${parseInt(d)}日`;
               }}
             />
