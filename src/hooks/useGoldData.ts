@@ -50,7 +50,12 @@ export function useGoldData() {
         throw new Error(priceData.error);
       }
 
-      // Fetch analysis
+      // Extract historical spot prices for technical analysis
+      const historicalPrices = (historyData.history || []).map(
+        (h: { spot: number }) => h.spot
+      );
+
+      // Fetch analysis with historical price data
       let analysis: AnalysisResult | null = null;
       try {
         const analysisRes = await fetch('/api/analysis', {
@@ -60,6 +65,7 @@ export function useGoldData() {
             articles: newsData.articles || [],
             spotPrice: priceData.spot.price,
             futuresPrice: priceData.futures.price,
+            historicalPrices,
           }),
         });
         analysis = await analysisRes.json();

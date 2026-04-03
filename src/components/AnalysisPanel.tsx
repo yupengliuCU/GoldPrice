@@ -1,6 +1,6 @@
 'use client';
 
-import type { AnalysisResult } from '@/lib/types';
+import type { AnalysisResult, SignalDetail } from '@/lib/types';
 
 interface AnalysisPanelProps {
   analysis: AnalysisResult | null;
@@ -12,6 +12,41 @@ const RECOMMENDATION_CONFIG = {
   hold: { label: '建议观望', color: 'amber', emoji: '◆' },
   sell: { label: '建议卖出', color: 'rose', emoji: '▼' },
 } as const;
+
+function SignalBar({ signal }: { signal: SignalDetail }) {
+  const barColor =
+    signal.score >= 65 ? 'bg-emerald-500' :
+    signal.score >= 40 ? 'bg-amber-500' :
+    'bg-rose-500';
+
+  const textColor =
+    signal.score >= 65 ? 'text-emerald-400' :
+    signal.score >= 40 ? 'text-amber-400' :
+    'text-rose-400';
+
+  return (
+    <div className="mb-3">
+      <div className="flex justify-between text-sm mb-1">
+        <span className="text-slate-400">
+          {signal.name}
+          <span className="text-slate-600 ml-1">({(signal.weight * 100).toFixed(0)}%)</span>
+        </span>
+        <span className={`font-medium ${textColor}`}>
+          {signal.label}
+        </span>
+      </div>
+      <div className="h-1.5 bg-slate-700 rounded-full overflow-hidden">
+        <div
+          className={`h-full rounded-full transition-all duration-500 ${barColor}`}
+          style={{ width: `${signal.score}%` }}
+        />
+      </div>
+      {signal.description && (
+        <p className="text-xs text-slate-600 mt-0.5">{signal.description}</p>
+      )}
+    </div>
+  );
+}
 
 export default function AnalysisPanel({ analysis, loading }: AnalysisPanelProps) {
   if (loading) {
@@ -43,62 +78,41 @@ export default function AnalysisPanel({ analysis, loading }: AnalysisPanelProps)
       <h3 className="text-lg font-semibold text-white mb-4">投资分析</h3>
 
       {/* Main recommendation badge */}
-      <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg mb-6 ${
-        config.color === 'emerald' ? 'bg-emerald-500/20 text-emerald-400' :
-        config.color === 'amber' ? 'bg-amber-500/20 text-amber-400' :
-        'bg-rose-500/20 text-rose-400'
-      }`}>
-        <span className="text-lg">{config.emoji}</span>
-        <span className="text-lg font-bold">{config.label}</span>
+      <div className="flex items-center justify-between mb-6">
+        <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg ${
+          config.color === 'emerald' ? 'bg-emerald-500/20 text-emerald-400' :
+          config.color === 'amber' ? 'bg-amber-500/20 text-amber-400' :
+          'bg-rose-500/20 text-rose-400'
+        }`}>
+          <span className="text-lg">{config.emoji}</span>
+          <span className="text-lg font-bold">{config.label}</span>
+        </div>
+        <span className="text-2xl font-bold text-white">{analysis.compositeScore}</span>
       </div>
 
-      {/* Sentiment gauge */}
+      {/* Signal bars */}
       <div className="mb-4">
-        <div className="flex justify-between text-sm mb-1">
-          <span className="text-slate-400">新闻情绪</span>
-          <span className="text-white font-medium">
-            {analysis.sentimentLabel} ({analysis.sentimentScore.toFixed(0)}%)
-          </span>
-        </div>
-        <div className="h-2 bg-slate-700 rounded-full overflow-hidden">
-          <div
-            className={`h-full rounded-full transition-all duration-500 ${
-              analysis.sentimentScore >= 65
-                ? 'bg-emerald-500'
-                : analysis.sentimentScore >= 40
-                ? 'bg-amber-500'
-                : 'bg-rose-500'
-            }`}
-            style={{ width: `${analysis.sentimentScore}%` }}
-          />
-        </div>
-      </div>
-
-      {/* Spread indicator */}
-      <div className="mb-4">
-        <div className="flex justify-between text-sm mb-1">
-          <span className="text-slate-400">期现价差</span>
-          <span className="text-white font-medium">
-            {analysis.spreadPercent >= 0 ? '+' : ''}{analysis.spreadPercent.toFixed(2)}%
-          </span>
-        </div>
-        <span className="text-xs text-slate-500">{analysis.spreadLabel}</span>
-      </div>
-
-      {/* Reasons */}
-      <div className="space-y-2 mb-4">
-        {analysis.reasons.map((reason, idx) => (
-          <div key={idx} className="flex items-start gap-2 text-sm text-slate-300">
-            <span className="text-amber-500 mt-0.5">•</span>
-            <span>{reason}</span>
-          </div>
+        {analysis.signals.map((signal, idx) => (
+          <SignalBar key={idx} signal={signal} />
         ))}
       </div>
+
+      {/* Key reasons */}
+      {analysis.reasons.length > 0 && (
+        <div className="space-y-1.5 mb-4 pt-3 border-t border-slate-700">
+          {analysis.reasons.map((reason, idx) => (
+            <div key={idx} className="flex items-start gap-2 text-sm text-slate-300">
+              <span className="text-amber-500 mt-0.5">•</span>
+              <span>{reason}</span>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Disclaimer */}
       <div className="mt-4 pt-3 border-t border-slate-700">
         <p className="text-xs text-slate-500 leading-relaxed">
-          ⚠ 以上分析仅供参考，不构成投资建议。投资有风险，入市需谨慎。
+          分析基于 RSI·均线交叉·新闻情绪·期现价差·波动率五维模型。仅供参考，不构成投资建议。
         </p>
       </div>
     </div>

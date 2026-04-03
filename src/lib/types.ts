@@ -23,14 +23,18 @@ export interface NewsArticle {
   publishedAt: string;
 }
 
+export interface SignalDetail {
+  name: string;
+  score: number;    // 0-100
+  weight: number;   // 0-1
+  label: string;
+  description: string;
+}
+
 export interface AnalysisResult {
   recommendation: 'buy' | 'hold' | 'sell';
   compositeScore: number;
-  sentimentScore: number;
-  spreadScore: number;
-  spreadPercent: number;
-  sentimentLabel: string;
-  spreadLabel: string;
+  signals: SignalDetail[];
   reasons: string[];
 }
 
@@ -39,4 +43,3 @@ export const UNIT_LABELS: Record<WeightUnit, string> = {
   g: '克',
   kg: '千克',
 };
-

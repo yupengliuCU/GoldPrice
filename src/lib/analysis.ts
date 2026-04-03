@@ -1,136 +1,275 @@
-import type { NewsArticle, AnalysisResult } from './types';
+import type { NewsArticle, AnalysisResult, SignalDetail } from './types';
 
-// Phrases specific to gold market sentiment (more precise than single words)
-const BULLISH_PHRASES = [
-  // Chinese
-  '金价上涨', '金价走高', '黄金上涨', '黄金走高', '增持黄金', '央行买入',
-  '避险需求', '需求增加', '创新高', '突破新高', '看涨', '利好黄金',
-  // English - use multi-word phrases to avoid false positives
-  'gold rises', 'gold surges', 'gold jumps', 'gold gains', 'gold soars',
-  'gold rallies', 'gold climbs', 'prices rise', 'prices surge',
-  'safe haven', 'record high', 'all-time high', 'bullish',
-  'buying gold', 'gold demand', 'central bank buying',
-  'geopolitical risk', 'geopolitical tensions', 'inflation hedge',
-];
+// ─── Signal 1: Price Momentum (RSI + Moving Average) ─────────────────────────
 
-const BEARISH_PHRASES = [
-  // Chinese
-  '金价下跌', '金价走低', '黄金下跌', '黄金走低', '抛售黄金', '减持黄金',
-  '利率上升', '美元走强', '看跌', '利空黄金',
-  // English
-  'gold drops', 'gold falls', 'gold declines', 'gold slumps', 'gold tumbles',
-  'gold plunges', 'gold sinks', 'gold dips', 'prices drop', 'prices fall',
-  'gold down', 'bearish', 'sell-off', 'selloff',
-  'rate hike', 'strong dollar', 'dollar strength',
-  'profit taking', 'profit-taking',
-];
+function calculateRSI(prices: number[], period = 14): number {
+  if (prices.length < period + 1) return 50; // neutral if not enough data
 
-// Single keywords that are strong signals on their own
-const BULLISH_KEYWORDS = ['surge', 'soar', 'rally', 'bullish', 'record'];
-const BEARISH_KEYWORDS = ['plunge', 'crash', 'bearish', 'slump', 'tumble'];
+  let gains = 0;
+  let losses = 0;
 
-function calculateSentiment(articles: NewsArticle[]): number {
-  const text = articles
-    .map((a) => `${a.title} ${a.description}`)
-    .join(' ')
-    .toLowerCase();
-
-  let positiveScore = 0;
-  let negativeScore = 0;
-
-  // Multi-word phrases (higher weight: +8 each)
-  for (const phrase of BULLISH_PHRASES) {
-    const regex = new RegExp(phrase.toLowerCase(), 'g');
-    const matches = text.match(regex);
-    if (matches) positiveScore += matches.length * 8;
+  for (let i = prices.length - period; i < prices.length; i++) {
+    const change = prices[i] - prices[i - 1];
+    if (change > 0) gains += change;
+    else losses += Math.abs(change);
   }
 
-  for (const phrase of BEARISH_PHRASES) {
-    const regex = new RegExp(phrase.toLowerCase(), 'g');
-    const matches = text.match(regex);
-    if (matches) negativeScore += matches.length * 8;
-  }
-
-  // Strong single keywords with word boundaries (lower weight: +4 each)
-  for (const keyword of BULLISH_KEYWORDS) {
-    const regex = new RegExp(`\\b${keyword}\\b`, 'gi');
-    const matches = text.match(regex);
-    if (matches) positiveScore += matches.length * 4;
-  }
-
-  for (const keyword of BEARISH_KEYWORDS) {
-    const regex = new RegExp(`\\b${keyword}\\b`, 'gi');
-    const matches = text.match(regex);
-    if (matches) negativeScore += matches.length * 4;
-  }
-
-  // Normalize: score from 0-100, starting at 50
-  const netScore = positiveScore - negativeScore;
-  // Each 10 points of net score moves the gauge by 5%
-  const score = 50 + netScore * 0.5;
-  return Math.max(0, Math.min(100, Math.round(score)));
+  if (losses === 0) return 100;
+  const rs = (gains / period) / (losses / period);
+  return 100 - (100 / (1 + rs));
 }
 
-function getSpreadSignal(spreadPercent: number): { score: number; label: string } {
-  if (spreadPercent > 2) {
-    return { score: 70, label: '高升水 (看涨)' };
-  } else if (spreadPercent >= 0) {
-    return { score: 50, label: '正常升水 (中性)' };
+function calculateMA(prices: number[], period: number): number {
+  const slice = prices.slice(-period);
+  return slice.reduce((a, b) => a + b, 0) / slice.length;
+}
+
+function getMomentumSignal(prices: number[]): SignalDetail {
+  const rsi = calculateRSI(prices);
+  const currentPrice = prices[prices.length - 1];
+  const ma5 = calculateMA(prices, Math.min(5, prices.length));
+  const ma20 = calculateMA(prices, Math.min(20, prices.length));
+
+  // RSI score: RSI > 70 = overbought (bearish), RSI < 30 = oversold (bullish)
+  // We invert for buy signal: low RSI = high buy score
+  let rsiScore: number;
+  if (rsi >= 70) rsiScore = 30;       // overbought → bearish
+  else if (rsi <= 30) rsiScore = 70;  // oversold → bullish
+  else rsiScore = 50;                  // neutral
+
+  // MA crossover: price above MA20 = bullish trend
+  let maScore: number;
+  if (currentPrice > ma20 * 1.02) maScore = 70;      // clearly above
+  else if (currentPrice < ma20 * 0.98) maScore = 30;  // clearly below
+  else maScore = 50;
+
+  // MA5 vs MA20 crossover
+  let crossScore: number;
+  if (ma5 > ma20) crossScore = 65;
+  else if (ma5 < ma20) crossScore = 35;
+  else crossScore = 50;
+
+  const score = Math.round(rsiScore * 0.4 + maScore * 0.3 + crossScore * 0.3);
+
+  let label: string;
+  if (score >= 65) label = '看涨';
+  else if (score >= 40) label = '中性';
+  else label = '看跌';
+
+  return {
+    name: '价格动量',
+    score,
+    weight: 0.35,
+    label,
+    description: `RSI(14)=${rsi.toFixed(1)} · 价格${currentPrice > ma20 ? '高于' : '低于'}MA20 · MA5${ma5 > ma20 ? '>' : '<'}MA20`,
+  };
+}
+
+// ─── Signal 2: News Sentiment (Regex pattern matching) ───────────────────────
+
+// Patterns with context — match verb forms, tenses, variations
+const BULLISH_PATTERNS = [
+  /gold\s+(?:price\s+)?(?:rises?|surges?|jumps?|gains?|soars?|rall(?:y|ies|ied)|climbs?|advances?|pushes?\s+(?:up|higher))/gi,
+  /(?:prices?|gold)\s+(?:hit|reach|set)\s+(?:new\s+)?(?:record|high|all[- ]time)/gi,
+  /safe[- ]haven\s+(?:demand|buying|asset|appeal)/gi,
+  /(?:central\s+bank|央行)\s*(?:buy|bought|purchase|增持|买入)/gi,
+  /(?:bullish|看涨|利好|避险需求|需求增加|金价上涨|黄金上涨|金价走高)/gi,
+  /geopolitical\s+(?:risk|tension|uncertaint)/gi,
+  /inflation\s+(?:hedge|concern|fear|worry|pressure)/gi,
+  /(?:weak|weaken|soften)\w*\s+(?:dollar|usd|美元)/gi,
+];
+
+const BEARISH_PATTERNS = [
+  /gold\s+(?:price\s+)?(?:drops?|falls?|declines?|slumps?|tumbles?|plunges?|sinks?|dips?|slides?|loses?|retreats?|eases?)/gi,
+  /(?:prices?|gold)\s+(?:under\s+pressure|lose|lost)\s+ground/gi,
+  /(?:profit[- ]taking|sell[- ]?off|selloff|selling\s+pressure)/gi,
+  /(?:rate\s+hike|interest\s+rate\s+(?:rise|increase)|hawkish)/gi,
+  /(?:strong|strength|strengthen)\w*\s+(?:dollar|usd|美元)/gi,
+  /(?:bearish|看跌|利空|金价下跌|黄金下跌|金价走低|抛售)/gi,
+  /(?:fed|federal\s+reserve)\s+(?:hawkish|tighten|rate)/gi,
+  /(?:bond\s+yield|treasury\s+yield)\s+(?:rise|surge|jump|climb)/gi,
+];
+
+function calculateNewsSentiment(articles: NewsArticle[]): SignalDetail {
+  // Weight recent articles more heavily
+  const now = Date.now();
+  let weightedBullish = 0;
+  let weightedBearish = 0;
+  let totalWeight = 0;
+
+  for (const article of articles) {
+    const hoursAgo = (now - new Date(article.publishedAt).getTime()) / 3600000;
+    // Decay: articles from 0h ago = weight 1.0, 24h ago = 0.5, 48h+ = 0.25
+    const timeWeight = Math.max(0.25, 1 - hoursAgo / 48);
+    const text = `${article.title} ${article.description}`.toLowerCase();
+
+    let bullCount = 0;
+    let bearCount = 0;
+
+    for (const pattern of BULLISH_PATTERNS) {
+      pattern.lastIndex = 0;
+      const matches = text.match(pattern);
+      if (matches) bullCount += matches.length;
+    }
+
+    for (const pattern of BEARISH_PATTERNS) {
+      pattern.lastIndex = 0;
+      const matches = text.match(pattern);
+      if (matches) bearCount += matches.length;
+    }
+
+    weightedBullish += bullCount * timeWeight;
+    weightedBearish += bearCount * timeWeight;
+    totalWeight += timeWeight;
+  }
+
+  // Normalize to 0-100 scale
+  const netSentiment = totalWeight > 0 ? (weightedBullish - weightedBearish) / totalWeight : 0;
+  const score = Math.max(0, Math.min(100, Math.round(50 + netSentiment * 15)));
+
+  let label: string;
+  if (score >= 65) label = '偏多';
+  else if (score >= 40) label = '中性';
+  else label = '偏空';
+
+  const total = Math.round(weightedBullish + weightedBearish);
+  return {
+    name: '新闻情绪',
+    score,
+    weight: 0.30,
+    label,
+    description: `看涨信号 ${Math.round(weightedBullish)} · 看跌信号 ${Math.round(weightedBearish)} · 共分析 ${articles.length} 篇`,
+  };
+}
+
+// ─── Signal 3: Futures Spread ────────────────────────────────────────────────
+
+function getSpreadSignal(spotPrice: number, futuresPrice: number): SignalDetail {
+  const spreadPct = ((futuresPrice - spotPrice) / spotPrice) * 100;
+
+  let score: number;
+  let label: string;
+
+  if (spreadPct > 3) {
+    score = 75;
+    label = '高升水 (强看涨)';
+  } else if (spreadPct > 1.5) {
+    score = 65;
+    label = '升水 (偏看涨)';
+  } else if (spreadPct >= 0) {
+    score = 50;
+    label = '正常升水 (中性)';
+  } else if (spreadPct >= -1) {
+    score = 35;
+    label = '轻度贴水 (偏看跌)';
   } else {
-    return { score: 30, label: '贴水 (看跌)' };
+    score = 25;
+    label = '深度贴水 (强看跌)';
   }
+
+  return {
+    name: '期现价差',
+    score,
+    weight: 0.20,
+    label,
+    description: `价差 ${spreadPct >= 0 ? '+' : ''}${spreadPct.toFixed(2)}%`,
+  };
 }
+
+// ─── Signal 4: Volatility ────────────────────────────────────────────────────
+
+function getVolatilitySignal(prices: number[]): SignalDetail {
+  if (prices.length < 5) {
+    return { name: '波动率', score: 50, weight: 0.15, label: '数据不足', description: '' };
+  }
+
+  // Calculate recent daily returns volatility
+  const returns = [];
+  for (let i = 1; i < prices.length; i++) {
+    returns.push((prices[i] - prices[i - 1]) / prices[i - 1]);
+  }
+
+  const recentReturns = returns.slice(-10);
+  const mean = recentReturns.reduce((a, b) => a + b, 0) / recentReturns.length;
+  const variance = recentReturns.reduce((sum, r) => sum + (r - mean) ** 2, 0) / recentReturns.length;
+  const volatility = Math.sqrt(variance) * 100; // as percentage
+
+  // High volatility = uncertain, suggest caution (hold)
+  // Low volatility with uptrend = stable bull, good to buy
+  // Low volatility with downtrend = stable bear, be careful
+  const lastReturn = returns[returns.length - 1] || 0;
+
+  let score: number;
+  let label: string;
+
+  if (volatility > 3) {
+    score = 40; // high vol = caution
+    label = '高波动 (谨慎)';
+  } else if (volatility > 1.5) {
+    score = lastReturn > 0 ? 55 : 45;
+    label = '中等波动';
+  } else {
+    score = lastReturn > 0 ? 65 : 35;
+    label = lastReturn > 0 ? '低波动上行' : '低波动下行';
+  }
+
+  return {
+    name: '波动率',
+    score,
+    weight: 0.15,
+    label,
+    description: `日波动 ${volatility.toFixed(2)}% · 趋势${lastReturn >= 0 ? '上行' : '下行'}`,
+  };
+}
+
+// ─── Composite Analysis ──────────────────────────────────────────────────────
 
 export function analyze(
   articles: NewsArticle[],
   spotPrice: number,
-  futuresPrice: number
+  futuresPrice: number,
+  historicalPrices: number[] = [],
 ): AnalysisResult {
-  const sentimentScore = calculateSentiment(articles);
-  const spreadPercent = ((futuresPrice - spotPrice) / spotPrice) * 100;
-  const spreadSignal = getSpreadSignal(spreadPercent);
+  const signals: SignalDetail[] = [
+    getMomentumSignal(historicalPrices.length > 0 ? historicalPrices : [spotPrice]),
+    calculateNewsSentiment(articles),
+    getSpreadSignal(spotPrice, futuresPrice),
+    getVolatilitySignal(historicalPrices.length > 0 ? historicalPrices : [spotPrice]),
+  ];
 
-  const compositeScore = sentimentScore * 0.6 + spreadSignal.score * 0.4;
+  // Weighted composite
+  const compositeScore = Math.round(
+    signals.reduce((sum, s) => sum + s.score * s.weight, 0)
+  );
 
   let recommendation: 'buy' | 'hold' | 'sell';
-  let reasons: string[] = [];
+  const reasons: string[] = [];
 
-  if (compositeScore >= 65) {
+  if (compositeScore >= 62) {
     recommendation = 'buy';
-    reasons.push('综合评分偏高，市场情绪积极');
-  } else if (compositeScore >= 40) {
+  } else if (compositeScore >= 42) {
     recommendation = 'hold';
-    reasons.push('综合评分中性，建议观望等待更明确信号');
   } else {
     recommendation = 'sell';
-    reasons.push('综合评分偏低，市场情绪消极');
   }
 
-  if (sentimentScore >= 65) {
-    reasons.push('新闻情绪偏多，市场看涨信号较强');
-  } else if (sentimentScore <= 35) {
-    reasons.push('新闻情绪偏空，市场看跌信号较强');
+  // Generate reasons from each signal
+  for (const signal of signals) {
+    if (signal.score >= 65) {
+      reasons.push(`${signal.name}: ${signal.label} (${signal.description})`);
+    } else if (signal.score <= 35) {
+      reasons.push(`${signal.name}: ${signal.label} (${signal.description})`);
+    }
   }
 
-  if (spreadPercent > 2) {
-    reasons.push(`期现价差 ${spreadPercent.toFixed(2)}%，期货溢价较高`);
-  } else if (spreadPercent < 0) {
-    reasons.push(`期现价差 ${spreadPercent.toFixed(2)}%，出现贴水`);
+  if (reasons.length === 0) {
+    reasons.push('各项指标均处于中性区间，建议观望');
   }
-
-  let sentimentLabel: string;
-  if (sentimentScore >= 65) sentimentLabel = '偏多';
-  else if (sentimentScore >= 40) sentimentLabel = '中性';
-  else sentimentLabel = '偏空';
 
   return {
     recommendation,
     compositeScore,
-    sentimentScore,
-    spreadScore: spreadSignal.score,
-    spreadPercent,
-    sentimentLabel,
-    spreadLabel: spreadSignal.label,
+    signals,
     reasons,
   };
 }
