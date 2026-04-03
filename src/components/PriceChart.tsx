@@ -117,6 +117,7 @@ export default function PriceChart({
                 const d = new Date(v);
                 return `${d.getMonth() + 1}/${d.getDate()}`;
               }}
+              interval="preserveStartEnd"
             />
             <YAxis
               stroke="#94A3B8"

@@ -63,11 +63,16 @@ export default function PriceCard({
         </span>
       </div>
 
-      <div className={`flex items-center gap-2 text-sm font-medium ${
-        isUp ? 'text-emerald-400' : 'text-rose-400'
-      }`}>
-        <span>{isUp ? '▲' : '▼'}</span>
-        <span>{formatChange(change, changePercent)}</span>
+      <div className="flex items-center justify-between">
+        <div className={`flex items-center gap-2 text-sm font-medium ${
+          isUp ? 'text-emerald-400' : 'text-rose-400'
+        }`}>
+          <span>{isUp ? '▲' : '▼'}</span>
+          <span>{formatChange(change, changePercent)}</span>
+        </div>
+        <span className="text-xs text-slate-600">
+          {new Date().toLocaleDateString('zh-CN')}
+        </span>
       </div>
     </div>
   );
