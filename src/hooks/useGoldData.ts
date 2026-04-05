@@ -14,6 +14,7 @@ interface GoldData {
   loading: boolean;
   error: string | null;
   lastUpdated: Date | null;
+  marketClosed: boolean;
 }
 
 export function useGoldData() {
@@ -27,6 +28,7 @@ export function useGoldData() {
     loading: true,
     error: null,
     lastUpdated: null,
+    marketClosed: false,
   });
 
   const fetchData = useCallback(async () => {
@@ -83,6 +85,7 @@ export function useGoldData() {
         loading: false,
         error: null,
         lastUpdated: new Date(),
+        marketClosed: priceData.marketClosed || false,
       });
     } catch (err) {
       setData((prev) => ({

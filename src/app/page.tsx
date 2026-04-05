@@ -25,6 +25,11 @@ export default function Home() {
                 <span className="text-slate-900 font-bold text-sm">Au</span>
               </div>
               <h1 className="text-xl font-bold text-white">黄金价格追踪器</h1>
+              {data.marketClosed && (
+                <span className="text-xs bg-slate-700 text-slate-400 px-2 py-0.5 rounded-full">
+                  休市中
+                </span>
+              )}
               {data.lastUpdated && (
                 <span className="text-xs text-slate-500 hidden sm:inline">
                   更新于 {data.lastUpdated.toLocaleTimeString('zh-CN')}
